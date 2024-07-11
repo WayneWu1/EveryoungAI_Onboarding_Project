@@ -47,3 +47,7 @@ Huawen Wu 华文吴
 
 ## Out of Scope
 - Security
+
+## Test the API
+To test the API, simply entering the following link into the browser: <br> <br>
+https://eom3fuj2mf.execute-api.us-east-1.amazonaws.com/dev/name-matching?name=your_desired_name_to_match
