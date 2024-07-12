@@ -8,12 +8,16 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.handler = void 0;
 const aws_sdk_1 = require("aws-sdk");
+const openai_1 = __importDefault(require("openai"));
 // Declare a constant for table name
 const TABLE_NAME = 'Users';
-// Initialize the DynamoDB instant
+// Initialize the DynamoDB client
 const dynamoDb = new aws_sdk_1.DynamoDB.DocumentClient({
     region: 'us-east-1'
 });
@@ -25,31 +29,52 @@ const getUsers = () => __awaiter(void 0, void 0, void 0, function* () {
     const data = yield dynamoDb.scan(params).promise();
     return data.Items;
 });
+// Initialize the OpenAI API client
+const openai = new openai_1.default({
+    apiKey: process.env.OPENAI_API_KEY,
+});
+// Call OpenAI API to process user description and filter users
+const filterUsers = (description, users) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    const prompt = `
+  You are an AI assistant responsible for helping older people find their contacts. You mainly reply in English, but are able to reply in other languages.
+
+  Task:
+  Based on the following list of contacts and the older person's query, find the contact that best matches the description of the query and provide their complete information in a conversational manner.
+  
+  Contact list:
+  ${JSON.stringify(users, null, 2)}
+  
+  Query: ${description}
+  
+  Now, please provide a response as if you were having a conversation with the user, including the contact information if found.`;
+    const response = yield openai.chat.completions.create({
+        model: 'gpt-4-turbo',
+        messages: [
+            {
+                role: 'user',
+                content: prompt
+            }
+        ],
+    });
+    if (!response.choices || !((_a = response.choices[0].message) === null || _a === void 0 ? void 0 : _a.content)) {
+        return "No match found";
+    }
+    return response.choices[0].message.content.trim();
+});
 const handler = (event) => __awaiter(void 0, void 0, void 0, function* () {
     var _a;
-    //Get the users list
+    // Get the users list
     const users = yield getUsers();
-    // Get the parameter of name that we are matching
-    const inputName = ((_a = event.queryStringParameters) === null || _a === void 0 ? void 0 : _a.name) || "";
-    const matchedUser = users.find(user => user.alias.some(alias => 
-    // Formatting, making the request input and the alias to the same format for comparison
-    alias.toLowerCase().replace(/\s/g, '') === inputName.toLowerCase().replace(/\s/g, '')));
+    // Get the parameter of description that we are matching
+    const description = ((_a = event.queryStringParameters) === null || _a === void 0 ? void 0 : _a.description) || "";
+    // Filter users using OpenAI API
+    const result = yield filterUsers(description, users);
     return {
         statusCode: 200,
         body: JSON.stringify({
-            // Deal with the response
-            message: matchedUser ? matchedUser : "No match found"
+            result: result
         }),
     };
 });
 exports.handler = handler;
-//TEST
-// const main = async () => {
-//   try {
-//     const users = await getUsers();
-//     console.log('Users:', users);
-//   } catch (error) {
-//     console.error('Error fetching users:', error);
-//   }
-// };
-// main();
